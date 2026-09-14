@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -17,15 +18,18 @@ func main() {
 	proxy := os.Args[1]
 	connectto := os.Args[2]
 
-	tr := &http3.Transport{
-		TLSClientConfig: &tls.Config{
+	conn := (&http3.Transport{}).NewClientConn(must(quic.DialAddr(
+		context.Background(),
+		proxy,
+		&tls.Config{
+			// TODO: ech?
 			NextProtos: []string{http3.NextProtoH3},
 		},
-	}
-
-	conn := tr.NewClientConn(must(quic.DialAddr(context.Background(), proxy, &tls.Config{
-		NextProtos: []string{http3.NextProtoH3},
-	}, &quic.Config{})))
+		&quic.Config{
+			// MaxIdleTimeout is by default 30s, so half that
+			KeepAlivePeriod: 15 * time.Second,
+		},
+	)))
 
 	str := must(conn.OpenRequestStream(conn.Context()))
 	must(0, str.SendRequestHeader(&http.Request{
