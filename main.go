@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,9 +15,17 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
+func multStrFlag(p *string, name []string, value, usage string) {
+	for _, v := range name {
+		flag.StringVar(p, v, value, usage)
+	}
+}
+
 func main() {
-	proxy := os.Args[1]
-	connectto := os.Args[2]
+	var proxy, to string
+	multStrFlag(&proxy, []string{"proxy", "p"}, "", "Proxy to connect to (host:port)")
+	multStrFlag(&to, []string{"dest", "d"}, "", "Destination to connect to (host:port)")
+	flag.Parse()
 
 	conn := (&http3.Transport{}).NewClientConn(must(quic.DialAddr(
 		context.Background(),
@@ -34,14 +43,13 @@ func main() {
 	str := must(conn.OpenRequestStream(conn.Context()))
 	must(0, str.SendRequestHeader(&http.Request{
 		Method: "CONNECT",
-		URL:    &url.URL{Opaque: connectto},
-		Host:   connectto,
-		Header: make(http.Header),
+		URL:    &url.URL{Opaque: to},
+		Host:   to,
 	}))
 
 	rsp := must(str.ReadResponse())
-	if rsp.StatusCode != 200 {
-		must(0, fmt.Errorf("bad status code! %d", rsp.StatusCode))
+	if rsp.StatusCode < 200 && rsp.StatusCode >= 300 {
+		panic(fmt.Errorf("bad status code! %d", rsp.StatusCode))
 	}
 
 	//TODO: errors and stuff
